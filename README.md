@@ -29,18 +29,23 @@ cmake --build build
 
 ### Демо
 
+```text
 Windows (Debug): build\Debug\npc_demo.exe
 Linux/macOS: ./build/npc_demo
+```
 
 ### Тесты
 
+```text
 Windows: ctest -C Debug --output-on-failure
 или: build\Debug\npc_tests.exe
 
 Linux/macOS: cd build && ctest --output-on-failure
+```
 
 ## Структура проекта
 
+```text
 npc_demo/
 ├── CMakeLists.txt
 ├── src/
@@ -52,3 +57,4 @@ npc_demo/
 │   └── state.hpp
 └── tests/
     └── npc_test.cpp
+```
