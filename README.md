@@ -36,11 +36,18 @@ Linux/macOS: ./build/npc_demo
 
 ### Тесты
 
+Windows:
 ```text
-Windows: ctest -C Debug --output-on-failure
-или: build\Debug\npc_tests.exe
+ctest -C Debug --output-on-failure
+```
+или:
+```text
+build\Debug\npc_tests.exe
+```
 
-Linux/macOS: cd build && ctest --output-on-failure
+Linux/macOS:
+```text
+cd build && ctest --output-on-failure
 ```
 
 ## Структура проекта
