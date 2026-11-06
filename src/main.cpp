@@ -32,11 +32,13 @@ int main() {
             double dt = 0.1;
             system.update(dt, player);
 
-            // Вывод позиции первого NPC для наглядности
+            // Вывод позиции NPC для наглядности
             if (!system.get_npcs_vector().empty()) {
-                auto& npc = system.get_npcs_vector()[0];
-                std::cout << "[NPC #1] Pos=(" << npc.pos.x << "," << npc.pos.y
+                for(auto& npc : system.get_npcs_vector()) {
+                    std::cout << "[NPC #" << npc.id << "] Pos=(" << npc.pos.x << "," << npc.pos.y
                         << ") | State=" << to_cstr(npc.state) << "\n";
+                }
+                
             }
 
             std::cout << "--- Frame " << i + 1 << " ---\n";
