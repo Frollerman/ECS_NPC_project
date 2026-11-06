@@ -1,98 +1,62 @@
 #include <gtest/gtest.h>
-#include "../src/npc_entity.hpp"
 #include "../src/npc_system.hpp"
+#include "../src/npc_entity.hpp"
+#include "../src/position.hpp"
+#include "../src/state.hpp"
+#include <fstream>
 
-// Вспомогательная функция для сравнения позиций
-bool posEqual(const Position& a, const Position& b) {
-    return a.x == b.x && a.y == b.y;
-}
-
-TEST(NpcStateTransitions, IdleToChaseWhenPlayerClose) {
-    NpcEntity npc;
-    Position player{3, 0}; // близко (в пределах detectionDistSq = 25)
+TEST(NpcSystem, DefaultConfigValues) {
     NpcSystem system;
-
-    // Изначально IDLE
-    EXPECT_EQ(npc.state, NpcState::IDLE);
-
-    system.update(npc, player, 0);
-
-    // Должен перейти в CHASE
-    EXPECT_EQ(npc.state, NpcState::CHASE);
+    EXPECT_NEAR(system.config().patrol_speed, 2.5, 1e-6);
+    EXPECT_NEAR(system.config().chase_speed, 4.0, 1e-6);
+    EXPECT_NEAR(system.config().detection_radius, 15.0, 1e-6);
 }
 
-TEST(NpcStateTransitions, ChaseToAttackWhenCloseEnough) {
+TEST(NpcSystem, PatrolToChaseTransition) {
+    NpcSystem system; // дефолтный конструктор
+    Player player{Position{0.0, 0.0}}; // игрок прямо в точке старта
+
     NpcEntity npc;
-    npc.state = NpcState::CHASE;
-    npc.pos = {0, 0};
-
-    Position player{1, 1}; // дистанция ~1.4, квадрат = 2, меньше attackDistSq=4
-    NpcSystem system;
-
-    system.update(npc, player, 0);
-
-    EXPECT_EQ(npc.state, NpcState::ATTACK);
-}
-
-TEST(NpcMovement, ChaseMovesTowardPlayer) {
-    NpcEntity npc;
-    npc.state = NpcState::CHASE;
-    npc.pos = {0, 0};
-
-    Position player{3, 4}; // игрок справа-вверху
-    NpcSystem system;
-
-    system.update(npc, player, 0);
-
-    // После одного тика NPC должен сделать шаг: x+1 и/или y+1
-    EXPECT_TRUE(npc.pos.x == 1 || npc.pos.x == 0); // может остаться, если dx=0
-    EXPECT_TRUE(npc.pos.y == 1 || npc.pos.y == 0);
-    
-    // Но в нашем коде dx!=0 и dy!=0, поэтому он точно сделает шаг по обеим осям
-    EXPECT_EQ(npc.pos.x, 1);
-    EXPECT_EQ(npc.pos.y, 1);
-}
-
-TEST(NpcMovement, PatrolMovesWithinRange) {
-    NpcEntity npc;
+    npc.id = 1;
+    npc.pos = Position{0.0, 0.0};
     npc.state = NpcState::PATROL;
-    npc.patrolRange = 4;
-    npc.pos = {3, 0}; // почти на границе
+    npc.patrol_target = Position{10.0, 10.0};
 
-    Position dummyPlayer{10, 10}; // далеко, чтобы не триггерить CHASE
-    NpcSystem system;
+    system.add_npc(npc);
+    EXPECT_EQ(system.get_npcs_vector()[0].state, NpcState::PATROL);
 
-    system.update(npc, dummyPlayer, 0);
-
-    // По нашей логике: если x < patrolRange, то x++, иначе x=0.
-    // Здесь x=3 < 4 → x станет 4
-    EXPECT_EQ(npc.pos.x, 4);
+    system.update(0.1, player); // дистанция 0 < detection_radius -> переход в CHASE
+    EXPECT_EQ(system.get_npcs_vector()[0].state, NpcState::CHASE);
 }
 
-TEST(NpcMovement, PatrolWrapsAround) {
-    NpcEntity npc;
-    npc.state = NpcState::PATROL;
-    npc.patrolRange = 4;
-    npc.pos = {4, 0}; // ровно на границе (или чуть больше)
-
-    Position dummyPlayer{10, 10};
+TEST(NpcSystem, ChaseToAttackTransition) {
     NpcSystem system;
+    Player player{Position{1.0, 1.0}}; // очень близко
 
-    system.update(npc, dummyPlayer, 0);
+    NpcEntity npc;
+    npc.id = 1;
+    npc.pos = Position{0.0, 0.0};
+    npc.state = NpcState::CHASE; // стартуем сразу в погоне
+    system.add_npc(npc);
 
-    // В нашей реализации: если x >= patrolRange, сбрасываем в 0
-    EXPECT_EQ(npc.pos.x, 0);
+    system.update(0.1, player); // дистанция < 2.0 -> переход в ATTACK
+    EXPECT_EQ(system.get_npcs_vector()[0].state, NpcState::ATTACK);
 }
 
-TEST(NpcStateTransitions, AttackReturnsToChaseIfPlayerRunsAway) {
-    NpcEntity npc;
-    npc.state = NpcState::ATTACK;
-    npc.pos = {2, 2};
+// Опциональный тест на JSON-конфиг (если json.hpp подключён)
+TEST(NpcSystem, JsonConfigLoading) {
+    // Создаём временный JSON для теста
+    std::ofstream tmp("test_config.json");
+    tmp << R"({"patrol":{"speed":3.5,"range":20,"loop":true},"chase":{"speed":5.0,"detection_radius":20},"attack":{"damage":15,"cooldown_ms":1000}})";
+    tmp.close();
 
-    Position player{10, 10}; // очень далеко
-    NpcSystem system;
+    try {
+        NpcSystem system("test_config.json");
+        EXPECT_NEAR(system.config().patrol_speed, 3.5, 1e-6);
+        EXPECT_NEAR(system.config().detection_radius, 20.0, 1e-6);
+    } catch (...) {
+        FAIL() << "Failed to load JSON config";
+    }
 
-    system.update(npc, player, 0);
-
-    EXPECT_EQ(npc.state, NpcState::CHASE);
+    std::remove("test_config.json"); // чистим за собой
 }

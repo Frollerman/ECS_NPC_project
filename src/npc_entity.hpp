@@ -1,16 +1,14 @@
 #pragma once
+
 #include "position.hpp"
 #include "state.hpp"
 
 struct NpcEntity {
+    int id;
     Position pos;
-    NpcState state = NpcState::IDLE;
-
-    // Поведенческие параметры
-    int patrolRange = 4;
-    int detectionDistSq = 25; // 5^2
-    int attackDistSq = 4;     // 2^2
-
-    // Вспомогательные флаги/счётчики (можно вынести в отдельный компонент)
-    int patrolCounter = 0;
+    NpcState state;
+    
+    // точка, к которой патрулирует NPC
+    Position patrol_target;
+    double attack_timer = 0.0;
 };

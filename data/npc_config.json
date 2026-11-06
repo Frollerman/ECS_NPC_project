@@ -1,0 +1,15 @@
+{
+  "patrol": {
+    "speed": 2.5,
+    "range": 10.0,
+    "loop": true
+  },
+  "chase": {
+    "speed": 4.0,
+    "detection_radius": 15.0
+  },
+  "attack": {
+    "damage": 10,
+    "cooldown_ms": 1000
+  }
+}

@@ -1,79 +1,113 @@
 #include "npc_system.hpp"
+#include <fstream>
+#include <iostream>
 
-int NpcSystem::distanceSq(const Position& a, const Position& b) {
-    const int dx = a.x - b.x;
-    const int dy = a.y - b.y;
-    return dx * dx + dy * dy;
+#define USE_JSON
+
+#ifdef USE_JSON
+#include "../third_party/nlohmann/json.hpp"
+using json = nlohmann::json;
+#endif
+
+NpcSystem::NpcSystem() {
+    config_.patrol_speed = 2.5;
+    config_.chase_speed = 4.0;
+    config_.detection_radius = 15.0;
+    config_.attack_damage = 10;
 }
 
-void NpcSystem::handleIdle(NpcEntity& npc, const Position& playerPos) {
-    if (distanceSq(npc.pos, playerPos) <= npc.detectionDistSq) {
-        npc.state = NpcState::CHASE;
-        return;
-    }
-    // Иногда начинаем патрулировать
-    if ((npc.patrolCounter++ % 12) == 0) {
-        npc.state = NpcState::PATROL;
-    }
-}
-
-void NpcSystem::handlePatrol(NpcEntity& npc) {
-    // Простой «зигзаг» по X в пределах patrolRange
-    if (npc.pos.x < npc.patrolRange) {
-        ++npc.pos.x;
-    } else {
-        npc.pos.x = 0;
+#ifdef USE_JSON
+NpcSystem::NpcSystem(const std::string& config_path) {
+    std::ifstream file(config_path);
+    if (!file.is_open()) {
+        throw std::runtime_error("Cannot open config file: " + config_path);
     }
 
-    // Если игрок близко — переключаемся
-    // (в реальном коде проверка должна быть в update, но для наглядности продублируем)
+    json j;
+    file >> j;
+
+    const auto& p = j["patrol"];
+    const auto& c = j["chase"];
+    const auto& a = j["attack"];
+
+    config_.patrol_speed = p["speed"];
+    config_.patrol_range = p["range"];
+    config_.patrol_loop = p["loop"];
+    config_.chase_speed = c["speed"];
+    config_.detection_radius = c["detection_radius"];
+    config_.attack_damage = a["damage"];
+    config_.attack_cooldown_ms = a["cooldown_ms"];
+}
+#else
+// Если JSON не подключён, этот конструктор не используется
+NpcSystem::NpcSystem(const std::string&) {
+    throw std::runtime_error("JSON support not compiled");
+}
+#endif
+
+void NpcSystem::add_npc(NpcEntity entity) {
+    npcs_.push_back(std::move(entity));
 }
 
-void NpcSystem::handleChase(NpcEntity& npc, const Position& playerPos) {
-    const int dx = playerPos.x - npc.pos.x;
-    const int dy = playerPos.y - npc.pos.y;
-
-    if (dx != 0) npc.pos.x += (dx > 0 ? 1 : -1);
-    if (dy != 0) npc.pos.y += (dy > 0 ? 1 : -1);
-
-    const int distSq = distanceSq(npc.pos, playerPos);
-    if (distSq <= npc.attackDistSq) {
-        npc.state = NpcState::ATTACK;
-    }
+static double distance(const Position& a, const Position& b) {
+    double dx = a.x - b.x;
+    double dy = a.y - b.y;
+    return std::sqrt(dx * dx + dy * dy);
 }
 
-void NpcSystem::handleAttack(NpcEntity& npc, const Position& playerPos) {
-    const int distSq = distanceSq(npc.pos, playerPos);
-    // Если игрок убежал — снова в CHASE
-    if (distSq > npc.detectionDistSq) {
-        npc.state = NpcState::CHASE;
-    }
-    // Иначе держим состояние ATTACK
-}
+void NpcSystem::update(double dt, const Player& player) {
+    for (auto& npc : npcs_) {
+        double dist_to_player = distance(npc.pos, player.pos);
 
-void NpcSystem::handleFlee(NpcEntity& npc) {
-    // Можно добавить логику убегания, пока оставим заглушкой
-}
+        if (npc.state == NpcState::PATROL) {
+            // Патрулирование: двигаемся к patrol_target
+            double dx = npc.patrol_target.x - npc.pos.x;
+            double dy = npc.patrol_target.y - npc.pos.y;
+            double dist_to_target = std::sqrt(dx*dx + dy*dy);
 
-void NpcSystem::update(NpcEntity& npc, const Position& playerPos, int /*tick*/) {
-    switch (npc.state) {
-        case NpcState::IDLE:
-            handleIdle(npc, playerPos);
-            break;
-        case NpcState::PATROL:
-            handlePatrol(npc);
-            if (distanceSq(npc.pos, playerPos) <= npc.detectionDistSq) {
+            if (dist_to_target < 1.0) {
+                // Дошли до точки — разворачиваем цель для простого «туда-обратно»
+                npc.patrol_target.x = -npc.patrol_target.x;
+                npc.patrol_target.y = -npc.patrol_target.y;
+            } else {
+                double moveX = (dx / dist_to_target) * config_.patrol_speed * dt;
+                double moveY = (dy / dist_to_target) * config_.patrol_speed * dt;
+                npc.pos.x += moveX;
+                npc.pos.y += moveY;
+            }
+
+            // Переход: если игрок близко — в CHASE
+            if (dist_to_player < config_.detection_radius) {
+                std::cout << "[NPC #" << npc.id << "] Noticed player (dist=" << dist_to_player
+                          << ") -> Changing state to CHASE!\n";
                 npc.state = NpcState::CHASE;
             }
-            break;
-        case NpcState::CHASE:
-            handleChase(npc, playerPos);
-            break;
-        case NpcState::ATTACK:
-            handleAttack(npc, playerPos);
-            break;
-        case NpcState::FLEE:
-            handleFlee(npc);
-            break;
+        }
+        else if (npc.state == NpcState::CHASE) {
+            // Погоня: бежим к игроку
+            if (dist_to_player > 0.001) { // защита от деления на ноль
+                double moveX = ((player.pos.x - npc.pos.x) / dist_to_player) * config_.chase_speed * dt;
+                double moveY = ((player.pos.y - npc.pos.y) / dist_to_player) * config_.chase_speed * dt;
+                npc.pos.x += moveX;
+                npc.pos.y += moveY;
+            }
+
+            // Переход: почти догнали — в ATTACK
+            if (dist_to_player < 2.0) {
+                std::cout << "[NPC #" << npc.id << "] Caught player (dist=" << dist_to_player
+                          << ") -> Changing state to ATTACK!\n";
+                npc.state = NpcState::ATTACK;
+            }
+        }
+        else if (npc.state == NpcState::ATTACK) {
+            npc.attack_timer += dt;
+
+            // Наносим урон только раз в 1.0 сек
+            if (npc.attack_timer >= 1.0) {
+                std::cout << "[NPC #" << npc.id << "] Attacks player! Damage: "
+                        << config_.attack_damage << "\n";
+                npc.attack_timer -= 1.0;
+            }
+        }
     }
 }

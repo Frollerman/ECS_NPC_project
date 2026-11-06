@@ -1,33 +1,52 @@
 #include <iostream>
-#include <thread>
-#include <chrono>
-#include "npc_entity.hpp"
 #include "npc_system.hpp"
-#include "state.hpp"
 
 int main() {
-    NpcEntity npc;
-    Position player{5, 5}; // Игрок далеко
+    try {
+        // Вариант 1 (демо): быстрый запуск без JSON
+        // NpcSystem system;
 
-    NpcSystem system;
+        // Вариант 2 (с конфигом): раскомментируй, если папка data и json на месте
+        NpcSystem system("data/npc_config.json");
 
-    std::cout << "Starting NPC demo (component-style architecture)...\n\n";
+        Player player{Position{5.0, 5.0}};
 
-    for (int tick = 0; tick < 35; ++tick) {
-        // Эмуляция движения игрока
-        if (tick == 8)  player = {3, 0};   // Подходит ближе
-        if (tick == 14) player = {0, 10};  // Резко уходит
-        if (tick == 22) player = {2, 2};    // Снова приближается
+        NpcEntity npc1;
+        npc1.id = 1;
+        npc1.pos = Position{0.0, 0.0};
+        npc1.state = NpcState::PATROL;
+        npc1.patrol_target = Position{50.0, 50.0};
+        system.add_npc(npc1);
 
-        system.update(npc, player, tick);
+        NpcEntity npc2;
+        npc2.id = 2;
+        npc2.pos = Position{-10.0, -10.0};
+        npc2.state = NpcState::PATROL;
+        npc2.patrol_target = Position{-30.0, -30.0};
+        system.add_npc(npc2);
 
-        std::cout << "Tick " << tick
-                  << ": NPC (" << npc.pos.x << ", " << npc.pos.y
-                  << ") state=" << to_cstr(npc.state)
-                  << " | Player (" << player.x << ", " << player.y << ")\n";
+        std::cout << "Demo started. Player at (" << player.pos.x << ", " << player.pos.y << ")\n";
+        std::cout << "Config patrol_speed: " << system.config().patrol_speed << "\n\n";
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+        for (int i = 0; i < 30; ++i) {
+            double dt = 0.1;
+            system.update(dt, player);
+
+            // Вывод позиции первого NPC для наглядности
+            if (!system.get_npcs_vector().empty()) {
+                auto& npc = system.get_npcs_vector()[0];
+                std::cout << "[NPC #1] Pos=(" << npc.pos.x << "," << npc.pos.y
+                        << ") | State=" << static_cast<int>(npc.state) << "\n";
+            }
+
+            std::cout << "--- Frame " << i + 1 << " ---\n";
+        }
+
+
+        std::cout << "\nDemo finished successfully.\n";
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << "\n";
+        return 1;
     }
-
     return 0;
 }
