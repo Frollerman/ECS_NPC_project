@@ -9,7 +9,7 @@ int main() {
         // Вариант 2 (с конфигом): раскомментируй, если папка data и json на месте
         NpcSystem system("data/npc_config.json");
 
-        Player player{Position{5.0, 5.0}};
+        Player player{Position{15.0, 15.0}};
 
         NpcEntity npc1;
         npc1.id = 1;
@@ -28,7 +28,7 @@ int main() {
         std::cout << "Demo started. Player at (" << player.pos.x << ", " << player.pos.y << ")\n";
         std::cout << "Config patrol_speed: " << system.config().patrol_speed << "\n\n";
 
-        for (int i = 0; i < 30; ++i) {
+        for (int i = 0; i < 100; ++i) {
             double dt = 0.1;
             system.update(dt, player);
 
@@ -36,7 +36,7 @@ int main() {
             if (!system.get_npcs_vector().empty()) {
                 auto& npc = system.get_npcs_vector()[0];
                 std::cout << "[NPC #1] Pos=(" << npc.pos.x << "," << npc.pos.y
-                        << ") | State=" << static_cast<int>(npc.state) << "\n";
+                        << ") | State=" << to_cstr(npc.state) << "\n";
             }
 
             std::cout << "--- Frame " << i + 1 << " ---\n";
